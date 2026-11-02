@@ -59,6 +59,7 @@ public class ItemDisplayEntity extends SlotDisplayEntity implements Tickable {
     @Override
     public void spawnEntity() {
         super.spawnEntity();
+        if (!valid) return; // farther than general.view-distance: not spawned on the client
         moveAbsoluteRaw(position, yaw, pitch, headYaw, onGround, true);
         spawnHead();
     }
@@ -74,6 +75,7 @@ public class ItemDisplayEntity extends SlotDisplayEntity implements Tickable {
 
     @Override
     public void tick() {
+        super.tick();
         if (head != null) placeHead();
     }
 
@@ -421,6 +423,7 @@ public class ItemDisplayEntity extends SlotDisplayEntity implements Tickable {
         setPitch(pitch);
         setHeadYaw(headYaw);
         setOnGround(isOnGround);
+        if (!valid) return; // not spawned on the client (culled by distance)
 
         MoveEntityAbsolutePacket moveEntityPacket = new MoveEntityAbsolutePacket();
         moveEntityPacket.setRuntimeEntityId(geyserId);

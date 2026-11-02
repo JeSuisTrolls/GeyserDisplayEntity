@@ -13,6 +13,7 @@ import org.geysermc.geyser.entity.properties.type.FloatProperty;
 import org.geysermc.geyser.entity.properties.type.IntProperty;
 import org.geysermc.geyser.entity.spawn.EntitySpawnContext;
 import org.geysermc.geyser.entity.type.Entity;
+import org.geysermc.geyser.entity.type.Tickable;
 import org.geysermc.geyser.session.GeyserSession;
 import org.geysermc.geyser.util.MathUtils;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.metadata.EntityMetadata;
@@ -21,7 +22,7 @@ import org.geysermc.mcprotocollib.protocol.data.game.entity.metadata.type.ByteEn
 import static me.geyserextensionists.geyserdisplayentity.GeyserDisplayEntity.MAX_VALUE;
 import static me.geyserextensionists.geyserdisplayentity.GeyserDisplayEntity.MIN_VALUE;
 
-public class SlotDisplayEntity extends Entity {
+public class SlotDisplayEntity extends Entity implements Tickable {
 
     protected static final byte BILLBOARD_FIXED = 0;
     protected static final byte BILLBOARD_VERTICAL = 1;
@@ -46,6 +47,67 @@ public class SlotDisplayEntity extends Entity {
 
     public SlotDisplayEntity(EntitySpawnContext entitySpawnContext) {
         super(entitySpawnContext);
+    }
+
+    /** Ticks between two distance checks of one display (each display is checked on its own tick, spread out). */
+    private static final int CULL_CHECK_TICKS = 20;
+
+    /** Known to Geyser but not spawned on the Bedrock client because it is farther than general.view-distance. */
+    protected boolean culled = false;
+    private int cullTicks = -1;
+
+    /**
+     * Bedrock spawn distance (general.view-distance, blocks; 0 = no limit). Java hides displays past their view range
+     * on the client, but Bedrock keeps every entity the server sends: hundreds of furniture displays, each running its
+     * interpolation scripts, slow the client down. Far displays are kept in Geyser's cache only.
+     */
+    private static double viewDistance() {
+        GeyserDisplayEntity extension = GeyserDisplayEntity.getExtension();
+        if (extension == null || extension.getConfigManager().getGeneralConfig() == null) return 0;
+        return extension.getConfigManager().getGeneralConfig().getDouble("view-distance");
+    }
+
+    private boolean tooFar() {
+        double max = viewDistance();
+        if (max <= 0 || session == null || session.getPlayerEntity() == null) return false;
+        return session.getPlayerEntity().position().distanceSquared(position) > max * max;
+    }
+
+    @Override
+    public void spawnEntity() {
+        if (tooFar()) {
+            culled = true;
+            return;
+        }
+        culled = false;
+        // The add entity packet only carries the pending properties: after a cull they were already sent once, so
+        // queue the whole transform again.
+        pushTransformProperties();
+        super.spawnEntity();
+    }
+
+    @Override
+    public void tick() {
+        if (cullTicks < 0) cullTicks = Math.floorMod(getEntityId(), CULL_CHECK_TICKS); // spread the checks over the second
+        if (++cullTicks < CULL_CHECK_TICKS) return;
+        cullTicks = 0;
+        boolean far = tooFar();
+        if (culled && !far) {
+            spawnEntity();
+            if (valid) updateMainHand(session);
+        } else if (!culled && valid && far) {
+            despawnEntity();
+            culled = true;
+        }
+    }
+
+    protected void pushTransformProperties() {
+        pushTranslationProperties();
+        pushRotationProperties();
+        propertyManager.addProperty(new FloatProperty(Identifier.of("geyser:s_x"), MAX_VALUE, MIN_VALUE, 0F), scale.getX());
+        propertyManager.addProperty(new FloatProperty(Identifier.of("geyser:s_y"), MAX_VALUE, MIN_VALUE, 0F), scale.getY());
+        propertyManager.addProperty(new FloatProperty(Identifier.of("geyser:s_z"), MAX_VALUE, MIN_VALUE, 0F), scale.getZ());
+        propertyManager.addProperty(new FloatProperty(Identifier.of("geyser:s_q"), MAX_VALUE, MIN_VALUE, 0F), qScale);
     }
 
     public void updateMainHand(GeyserSession session) {

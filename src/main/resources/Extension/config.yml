@@ -9,6 +9,9 @@ general:
   vanilla-scale-multiplier: 1
   # Equip custom items (items with custom mapping) to hand
   hand: false
+  # Only spawn displays within this many blocks of the Bedrock player (0 = no limit). Java hides displays past
+  # their view range, Bedrock keeps every entity it gets: many furniture displays slow the client down.
+  view-distance: 0
 
 # Invisible item types
 hide-types:
