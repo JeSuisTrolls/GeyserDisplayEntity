@@ -58,6 +58,16 @@ public class ItemDisplayEntity extends SlotDisplayEntity implements Tickable {
 
     @Override
     public void spawnEntity() {
+        // The add entity packet only carries metadata changed since the last send: when a culled display spawns
+        // again, the hiding scale (0) was already sent to the despawned entity and would be missing, showing hidden
+        // items (ModelEngine bones) at full size. Queue the scale again.
+        if (needHide) {
+            metadata.put(EntityDataTypes.SCALE, 0f);
+        } else if (config != null && config.getBoolean("vanilla-scale")) {
+            applyScale();
+        } else {
+            metadata.put(EntityDataTypes.SCALE, 1f);
+        }
         super.spawnEntity();
         if (!valid) return; // farther than general.view-distance: not spawned on the client
         moveAbsoluteRaw(position, yaw, pitch, headYaw, onGround, true);
